@@ -17,4 +17,12 @@ export var ActivationState;
     ActivationState[ActivationState["DEACTIVATING"] = 1] = "DEACTIVATING";
     ActivationState[ActivationState["INACTIVE"] = 2] = "INACTIVE";
 })(ActivationState = ActivationState || (ActivationState = {}));
+/**
+ * Possible ticker strategies
+ */
+export var TickerStrategy;
+(function (TickerStrategy) {
+    TickerStrategy["Interval"] = "interval";
+    TickerStrategy["Worker"] = "worker";
+})(TickerStrategy = TickerStrategy || (TickerStrategy = {}));
 //# sourceMappingURL=types.js.map

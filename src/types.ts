@@ -156,7 +156,13 @@ export enum ActivationState {
   DEACTIVATING,
   INACTIVE,
 }
-
+/**
+ * Possible ticker strategies
+ */
+export enum TickerStrategy {
+  Interval = 'interval',
+  Worker = 'worker'
+}
 /**
  * @internal
  */
@@ -167,6 +173,7 @@ export interface IStomptHandlerConfig {
   disconnectHeaders: StompHeaders;
   heartbeatIncoming: number;
   heartbeatOutgoing: number;
+  heartbeatStrategy: TickerStrategy;
   splitLargeFrames: boolean;
   maxWebSocketChunkSize: number;
   forceBinaryWSFrames: boolean;

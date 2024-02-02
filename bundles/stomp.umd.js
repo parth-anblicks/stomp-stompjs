@@ -429,6 +429,69 @@
         ActivationState[ActivationState["DEACTIVATING"] = 1] = "DEACTIVATING";
         ActivationState[ActivationState["INACTIVE"] = 2] = "INACTIVE";
     })(exports.ActivationState = exports.ActivationState || (exports.ActivationState = {}));
+    /**
+     * Possible ticker strategies
+     */
+    exports.TickerStrategy = void 0;
+    (function (TickerStrategy) {
+        TickerStrategy["Interval"] = "interval";
+        TickerStrategy["Worker"] = "worker";
+    })(exports.TickerStrategy = exports.TickerStrategy || (exports.TickerStrategy = {}));
+
+    class Ticker {
+        constructor(_interval, _strategy = exports.TickerStrategy.Interval) {
+            this._interval = _interval;
+            this._strategy = _strategy;
+            this._workerScript = `
+    var startTime = Date.now();
+    setInterval(function() {
+        self.postMessage(Date.now() - startTime);
+    }, ${this._interval});
+  `;
+        }
+        start(tick) {
+            this.stop();
+            if (this.shouldUseWorker()) {
+                this.runWorker(tick);
+            }
+            else {
+                this.runInterval(tick);
+            }
+        }
+        stop() {
+            this.disposeWorker();
+            this.disposeInterval();
+        }
+        shouldUseWorker() {
+            return typeof (Worker) !== 'undefined' && this._strategy === exports.TickerStrategy.Worker;
+        }
+        runWorker(tick) {
+            if (!this._worker) {
+                this._worker = new Worker(URL.createObjectURL(new Blob([this._workerScript], { type: 'text/javascript' })));
+                this._worker.onmessage = (message) => tick(message.data);
+            }
+        }
+        runInterval(tick) {
+            if (!this._timer) {
+                const startTime = Date.now();
+                this._timer = setInterval(() => {
+                    tick(Date.now() - startTime);
+                }, this._interval);
+            }
+        }
+        disposeWorker() {
+            if (this._worker) {
+                this._worker.terminate();
+                delete this._worker;
+            }
+        }
+        disposeInterval() {
+            if (this._timer) {
+                clearInterval(this._timer);
+                delete this._timer;
+            }
+        }
+    }
 
     /**
      * Supported STOMP versions
@@ -584,6 +647,7 @@
             this._partialData = '';
             this._escapeHeaderValues = false;
             this._lastServerActivityTS = Date.now();
+            this._pinger = undefined;
             this.debug = config.debug;
             this.stompVersions = config.stompVersions;
             this.connectHeaders = config.connectHeaders;
@@ -677,12 +741,13 @@
             if (this.heartbeatOutgoing !== 0 && serverIncoming !== 0) {
                 const ttl = Math.max(this.heartbeatOutgoing, serverIncoming);
                 this.debug(`send PING every ${ttl}ms`);
-                this._pinger = setInterval(() => {
+                this._pinger = new Ticker(ttl, this._client.heartbeatStrategy);
+                this._pinger.start(() => {
                     if (this._webSocket.readyState === exports.StompSocketState.OPEN) {
                         this._webSocket.send(BYTE.LF);
                         this.debug('>>> PING');
                     }
-                }, ttl);
+                });
             }
             if (this.heartbeatIncoming !== 0 && serverOutgoing !== 0) {
                 const ttl = Math.max(this.heartbeatIncoming, serverOutgoing);
@@ -788,7 +853,7 @@
         _cleanUp() {
             this._connected = false;
             if (this._pinger) {
-                clearInterval(this._pinger);
+                this._pinger.stop();
                 this._pinger = undefined;
             }
             if (this._ponger) {
@@ -928,6 +993,15 @@
              * Outgoing heartbeat interval in milliseconds. Set to 0 to disable.
              */
             this.heartbeatOutgoing = 10000;
+            /**
+            * Outgoing heartbeat strategy.
+            * Can be worker or interval strategy, but will always use interval if the client is used in a non-browser environment.
+            *
+            * Interval strategy can be helpful if you discover disconnects after moving the browser in the background while the client is connected.
+            *
+            * Defaults to interval strategy.
+            */
+            this.heartbeatStrategy = exports.TickerStrategy.Worker;
             /**
              * This switches on a non-standard behavior while sending WebSocket packets.
              * It splits larger (text) packets into chunks of [maxWebSocketChunkSize]{@link Client#maxWebSocketChunkSize}.
@@ -1108,6 +1182,7 @@
             const webSocket = this._createWebSocket();
             this._stompHandler = new StompHandler(this, webSocket, {
                 debug: this.debug,
+                heartbeatStrategy: this.heartbeatStrategy,
                 stompVersions: this.stompVersions,
                 connectHeaders: this.connectHeaders,
                 disconnectHeaders: this._disconnectHeaders,

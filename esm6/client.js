@@ -1,5 +1,5 @@
 import { StompHandler } from './stomp-handler.js';
-import { ActivationState, StompSocketState, } from './types.js';
+import { ActivationState, StompSocketState, TickerStrategy } from './types.js';
 import { Versions } from './versions.js';
 /**
  * STOMP Client Class.
@@ -38,6 +38,15 @@ export class Client {
          * Outgoing heartbeat interval in milliseconds. Set to 0 to disable.
          */
         this.heartbeatOutgoing = 10000;
+        /**
+        * Outgoing heartbeat strategy.
+        * Can be worker or interval strategy, but will always use interval if the client is used in a non-browser environment.
+        *
+        * Interval strategy can be helpful if you discover disconnects after moving the browser in the background while the client is connected.
+        *
+        * Defaults to interval strategy.
+        */
+        this.heartbeatStrategy = TickerStrategy.Worker;
         /**
          * This switches on a non-standard behavior while sending WebSocket packets.
          * It splits larger (text) packets into chunks of [maxWebSocketChunkSize]{@link Client#maxWebSocketChunkSize}.
@@ -218,6 +227,7 @@ export class Client {
         const webSocket = this._createWebSocket();
         this._stompHandler = new StompHandler(this, webSocket, {
             debug: this.debug,
+            heartbeatStrategy: this.heartbeatStrategy,
             stompVersions: this.stompVersions,
             connectHeaders: this.connectHeaders,
             disconnectHeaders: this._disconnectHeaders,
